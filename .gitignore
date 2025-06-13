@@ -1,0 +1,34 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go toolchain
+*.out
+
+# Dependency directories (remove the 'vendor' directory if you use Go modules)
+# vendor/
+
+# Go workspace file
+go.work
+go.work.sum
+
+# Environment variables
+.env                # <--- PENTING: JANGAN PERNAH PUSH FILE INI!
+
+# Uploaded files directory
+uploads/            # <--- PENTING: JANGAN PERNAH PUSH FOLDER INI!
+
+# Local IDE/Editor specific files
+.idea/              # IntelliJ IDEA
+.vscode/            # VS Code
+.DS_Store           # macOS system files
+*.swp               # Vim swap files
+
+# Compiled programs (if you build the executable)
+dashboard-pekerjaan-backend 

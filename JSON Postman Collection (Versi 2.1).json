@@ -1,0 +1,410 @@
+{
+  "info": {
+    "_postman_id": "YOUR_COLLECTION_ID_HERE",
+    "name": "Dashboard Pekerjaan Backend - Basic Tests",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_collection_id": "YOUR_COLLECTION_ID_HERE"
+  },
+  "variables": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080/api/v1",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "staff_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "client_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "monthly_job_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "username",
+      "value": "your_staff_email@example.com",
+      "type": "string"
+    },
+    {
+      "key": "password",
+      "value": "your_staff_password",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login Staff",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"{{username}}\",\n    \"password\": \"{{password}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "pm.environment.set(\"token\", jsonData.token);",
+                  "console.log(\"Token: \" + pm.environment.get(\"token\"));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Staffs",
+      "item": [
+        {
+          "name": "Create Staff (Admin Role)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"nama\": \"Test Admin\",\n    \"email\": \"test.admin@example.com\",\n    \"password\": \"testpassword\",\n    \"role\": \"admin\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/staffs",
+              "host": ["{{baseUrl}}"],
+              "path": ["staffs"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "pm.environment.set(\"staff_id\", jsonData.staff_id);",
+                  "console.log(\"Staff ID: \" + pm.environment.get(\"staff_id\"));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get All Staffs",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/staffs",
+              "host": ["{{baseUrl}}"],
+              "path": ["staffs"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Clients",
+      "item": [
+        {
+          "name": "Create Client",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"client_name\": \"PT Test Client {{Date}}\",\n    \"npwp_client\": \"12.345.678.9-000.{{$randomInt}}\",\n    \"address_client\": \"Jl. Testing No. {{Date}}, Kota Test\",\n    \"membership_status\": \"Aktif\",\n    \"phone_client\": \"081234567890\",\n    \"email_client\": \"testclient{{$randomInt}}@example.com\",\n    \"pic_client\": \"Mr. Test\",\n    \"djp_online_username\": \"djp_test{{$randomInt}}\",\n    \"coretax_username\": \"coretax_test{{$randomInt}}\",\n    \"coretax_password\": \"coretaxpass{{$randomInt}}\",\n    \"pic_staff_sigma_id\": \"{{staff_id}}\",\n    \"client_category\": \"UMKM\",\n    \"pph_final_umkm\": true,\n    \"ppn\": true,\n    \"spt_tahunan\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/clients",
+              "host": ["{{baseUrl}}"],
+              "path": ["clients"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "pm.environment.set(\"client_id\", jsonData.client_id);",
+                  "console.log(\"Client ID: \" + pm.environment.get(\"client_id\"));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get All Clients",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/clients",
+              "host": ["{{baseUrl}}"],
+              "path": ["clients"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Client By ID",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/clients/{{client_id}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["clients", "{{client_id}}"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Monthly Jobs",
+      "item": [
+        {
+          "name": "Create Monthly Job",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"client_id\": \"{{client_id}}\",\n    \"job_month\": {{Date \"MM\"}},\n    \"job_year\": {{Date \"YYYY\"}},\n    \"assigned_pic_staff_sigma_id\": \"{{staff_id}}\",\n    \"overall_status\": \"Dikerjakan\",\n    \"tax_reports\": [\n        {\n            \"tax_type\": \"PPH_FINAL_UMKM\",\n            \"billing_code\": \"BILL{{Date \"YYYYMM\"}}{{$randomInt}}\",\n            \"payment_date\": \"{{Date \"ISO8601\"}}\",\n            \"payment_amount\": 1000000,\n            \"report_status\": \"Pending Payment\",\n            \"report_date\": null\n        }\n    ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/monthly-jobs",
+              "host": ["{{baseUrl}}"],
+              "path": ["monthly-jobs"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "pm.environment.set(\"monthly_job_id\", jsonData.job_id);",
+                  "console.log(\"Monthly Job ID: \" + pm.environment.get(\"monthly_job_id\"));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Monthly Job (with PDF)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PATCH",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "overall_status",
+                  "value": "Selesai",
+                  "type": "text"
+                },
+                {
+                  "key": "proof_of_work_pdf",
+                  "type": "file",
+                  "src": "/path/to/your/dummy.pdf"
+                },
+                {
+                  "key": "job_month",
+                  "value": "{{Date \"MM\"}}",
+                  "type": "text"
+                },
+                {
+                  "key": "job_year",
+                  "value": "{{Date \"YYYY\"}}",
+                  "type": "text"
+                },
+                {
+                  "key": "assigned_pic_staff_sigma_id",
+                  "value": "{{staff_id}}",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/monthly-jobs/{{monthly_job_id}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["monthly-jobs", "{{monthly_job_id}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Monthly Jobs",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/monthly-jobs",
+              "host": ["{{baseUrl}}"],
+              "path": ["monthly-jobs"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Dashboard Aggregation",
+      "item": [
+        {
+          "name": "Get Client All Jobs",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/clients/{{client_id}}/all-jobs",
+              "host": ["{{baseUrl}}"],
+              "path": ["clients", "{{client_id}}", "all-jobs"]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
