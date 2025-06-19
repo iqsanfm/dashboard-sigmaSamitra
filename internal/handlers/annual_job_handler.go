@@ -11,6 +11,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/iqsanfm/dashboard-pekerjaan-backend/internal/models"       // Pastikan ini modul Anda
 	"github.com/iqsanfm/dashboard-pekerjaan-backend/internal/repositories" // Pastikan ini modul Anda
+	"github.com/iqsanfm/dashboard-pekerjaan-backend/internal/services"
+	"github.com/iqsanfm/dashboard-pekerjaan-backend/pkg/auth"
 )
 
 // AnnualJobHandler handles HTTP requests for annual job operations
@@ -18,14 +20,16 @@ type AnnualJobHandler struct {
 	AnnualJobRepo repositories.AnnualJobRepository
 	ClientRepo    repositories.ClientRepository
 	StaffRepo     repositories.StaffRepository
+	InvoiceService services.InvoiceService
 }
 
 // NewAnnualJobHandler creates a new AnnualJobHandler
-func NewAnnualJobHandler(ajRepo repositories.AnnualJobRepository, cRepo repositories.ClientRepository, sRepo repositories.StaffRepository) *AnnualJobHandler {
+func NewAnnualJobHandler(ajRepo repositories.AnnualJobRepository, cRepo repositories.ClientRepository, sRepo repositories.StaffRepository, invService services.InvoiceService) *AnnualJobHandler {
 	return &AnnualJobHandler{
 		AnnualJobRepo: ajRepo,
 		ClientRepo:    cRepo,
 		StaffRepo:     sRepo,
+		InvoiceService: invService,
 	}
 }
 
@@ -107,21 +111,18 @@ func (h *AnnualJobHandler) CreateAnnualJob(c *gin.Context) {
 
 // GetAllAnnualJobs fetches all annual jobs, filtered by PIC if not admin
 func (h *AnnualJobHandler) GetAllAnnualJobs(c *gin.Context) {
-	staffID, exists := c.Get("staffID")
+	claims, exists := c.Get("user_claims")
 	if !exists {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Staff ID not found in context"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User claims not found in context"})
 		return
 	}
-	role, exists := c.Get("role")
-	if !exists {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Role not found in context"})
+	userClaims, ok := claims.(*auth.Claims)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse user claims"})
 		return
 	}
 
-	isAdmin := (role.(string) == "admin")
-	staffIDStr := staffID.(string)
-
-	jobs, err := h.AnnualJobRepo.GetAllAnnualJobs(staffIDStr, isAdmin)
+	jobs, err := h.AnnualJobRepo.GetAllAnnualJobs(userClaims.StaffID, userClaims.IsAdmin)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve annual jobs: " + err.Error()})
 		return
@@ -133,21 +134,18 @@ func (h *AnnualJobHandler) GetAllAnnualJobs(c *gin.Context) {
 func (h *AnnualJobHandler) GetAnnualJobByID(c *gin.Context) {
 	id := c.Param("id")
 
-	staffID, exists := c.Get("staffID")
+	claims, exists := c.Get("user_claims")
 	if !exists {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Staff ID not found in context"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User claims not found in context"})
 		return
 	}
-	role, exists := c.Get("role")
-	if !exists {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Role not found in context"})
+	userClaims, ok := claims.(*auth.Claims)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse user claims"})
 		return
 	}
 
-	isAdmin := (role.(string) == "admin")
-	staffIDStr := staffID.(string)
-
-	job, err := h.AnnualJobRepo.GetAnnualJobByID(id, staffIDStr, isAdmin)
+	job, err := h.AnnualJobRepo.GetAnnualJobByID(id, userClaims.StaffID, userClaims.IsAdmin)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Annual job not found or access denied"})
@@ -167,20 +165,18 @@ func (h *AnnualJobHandler) GetAnnualJobByID(c *gin.Context) {
 func (h *AnnualJobHandler) UpdateAnnualJob(c *gin.Context) {
 	id := c.Param("id")
 
-	staffID, exists := c.Get("staffID")
+claims, exists := c.Get("user_claims")
 	if !exists {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Staff ID not found in context"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User claims not found in context"})
 		return
 	}
-	role, exists := c.Get("role")
-	if !exists {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Role not found in context"})
+	userClaims, ok := claims.(*auth.Claims)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse user claims"})
 		return
 	}
-	isAdmin := (role.(string) == "admin")
-	staffIDStr := staffID.(string)
 
-	existingJob, err := h.AnnualJobRepo.GetAnnualJobByID(id, staffIDStr, isAdmin) // Filter by access
+	existingJob, err := h.AnnualJobRepo.GetAnnualJobByID(id, userClaims.StaffID, userClaims.IsAdmin) // Filter by access
 	if err != nil {
 		if err == sql.ErrNoRows {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Annual job not found"})
@@ -291,21 +287,19 @@ func (h *AnnualJobHandler) CreateAnnualTaxReport(c *gin.Context) {
 		return
 	}
 
-	staffID, exists := c.Get("staffID")
+	claims, exists := c.Get("user_claims")
 	if !exists {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Staff ID not found in context"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User claims not found in context"})
 		return
 	}
-	role, exists := c.Get("role")
-	if !exists {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Role not found in context"})
+	userClaims, ok := claims.(*auth.Claims)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse user claims"})
 		return
 	}
-	isAdmin := (role.(string) == "admin")
-	staffIDStr := staffID.(string)
 
 	// Validate annual job existence AND user access
-	job, err := h.AnnualJobRepo.GetAnnualJobByID(jobID, staffIDStr, isAdmin)
+	job, err := h.AnnualJobRepo.GetAnnualJobByID(jobID, userClaims.StaffID, userClaims.IsAdmin)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Annual job not found for tax report or access denied"})
@@ -352,18 +346,16 @@ func (h *AnnualJobHandler) UpdateAnnualTaxReport(c *gin.Context) {
 		return
 	}
 
-	staffID, exists := c.Get("staffID")
+	claims, exists := c.Get("user_claims")
 	if !exists {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Staff ID not found in context"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User claims not found in context"})
 		return
 	}
-	role, exists := c.Get("role")
-	if !exists {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Role not found in context"})
+	userClaims, ok := claims.(*auth.Claims)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse user claims"})
 		return
 	}
-	isAdmin := (role.(string) == "admin")
-	staffIDStr := staffID.(string)
 
 	existingReport, err := h.AnnualJobRepo.GetAnnualTaxReportByID(reportID)
 	if err != nil {
@@ -385,7 +377,7 @@ func (h *AnnualJobHandler) UpdateAnnualTaxReport(c *gin.Context) {
     }
 
 	// Validate access to the parent annual job
-	jobForReport, err := h.AnnualJobRepo.GetAnnualJobByID(existingReport.JobID, staffIDStr, isAdmin)
+	jobForReport, err := h.AnnualJobRepo.GetAnnualJobByID(jobID, userClaims.StaffID, userClaims.IsAdmin)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Annual job for this tax report not found or access denied"})
@@ -429,18 +421,16 @@ func (h *AnnualJobHandler) DeleteAnnualTaxReport(c *gin.Context) {
 	reportID := c.Param("report_id")
 	jobID := c.Param("id") // Annual Job ID from route, for potential access check
 
-	staffID, exists := c.Get("staffID")
+	claims, exists := c.Get("user_claims")
 	if !exists {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Staff ID not found in context"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User claims not found in context"})
 		return
 	}
-	role, exists := c.Get("role")
-	if !exists {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Role not found in context"})
+	userClaims, ok := claims.(*auth.Claims)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse user claims"})
 		return
 	}
-	isAdmin := (role.(string) == "admin")
-	staffIDStr := staffID.(string)
 
 	existingReport, err := h.AnnualJobRepo.GetAnnualTaxReportByID(reportID)
 	if err != nil {
@@ -462,7 +452,7 @@ func (h *AnnualJobHandler) DeleteAnnualTaxReport(c *gin.Context) {
     }
 
 	// Validate access to the parent annual job
-	jobForReport, err := h.AnnualJobRepo.GetAnnualJobByID(existingReport.JobID, staffIDStr, isAdmin)
+	jobForReport, err := h.AnnualJobRepo.GetAnnualJobByID(jobID, userClaims.StaffID, userClaims.IsAdmin)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Annual job for this tax report not found or access denied"})
@@ -499,21 +489,19 @@ func (h *AnnualJobHandler) CreateAnnualDividendReport(c *gin.Context) {
 		return
 	}
 
-	staffID, exists := c.Get("staffID")
+claims, exists := c.Get("user_claims")
 	if !exists {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Staff ID not found in context"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User claims not found in context"})
 		return
 	}
-	role, exists := c.Get("role")
-	if !exists {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Role not found in context"})
+	userClaims, ok := claims.(*auth.Claims)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse user claims"})
 		return
 	}
-	isAdmin := (role.(string) == "admin")
-	staffIDStr := staffID.(string)
 
 	// Validate annual job existence AND user access
-	job, err := h.AnnualJobRepo.GetAnnualJobByID(jobID, staffIDStr, isAdmin)
+	job, err := h.AnnualJobRepo.GetAnnualJobByID(jobID, userClaims.StaffID, userClaims.IsAdmin)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Annual job not found for dividend report or access denied"})
@@ -582,18 +570,16 @@ func (h *AnnualJobHandler) UpdateAnnualDividendReport(c *gin.Context) {
 	}
 
 
-	staffID, exists := c.Get("staffID")
+	claims, exists := c.Get("user_claims")
 	if !exists {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Staff ID not found in context"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User claims not found in context"})
 		return
 	}
-	role, exists := c.Get("role")
-	if !exists {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Role not found in context"})
+	userClaims, ok := claims.(*auth.Claims)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse user claims"})
 		return
 	}
-	isAdmin := (role.(string) == "admin")
-	staffIDStr := staffID.(string)
 
 	existingReport, err := h.AnnualJobRepo.GetAnnualDividendReportByID(reportID)
 	if err != nil {
@@ -615,7 +601,7 @@ func (h *AnnualJobHandler) UpdateAnnualDividendReport(c *gin.Context) {
     }
 
 	// Validate access to the parent annual job
-	jobForReport, err := h.AnnualJobRepo.GetAnnualJobByID(existingReport.JobID, staffIDStr, isAdmin)
+	jobForReport, err := h.AnnualJobRepo.GetAnnualJobByID(jobID, userClaims.StaffID, userClaims.IsAdmin)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Annual job for this dividend report not found or access denied"})
@@ -652,18 +638,16 @@ func (h *AnnualJobHandler) DeleteAnnualDividendReport(c *gin.Context) {
 	reportID := c.Param("report_id")
 	jobID := c.Param("id") // For potential access check
 
-	staffID, exists := c.Get("staffID")
+	claims, exists := c.Get("user_claims")
 	if !exists {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Staff ID not found in context"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User claims not found in context"})
 		return
 	}
-	role, exists := c.Get("role")
-	if !exists {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Role not found in context"})
+	userClaims, ok := claims.(*auth.Claims)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse user claims"})
 		return
 	}
-	isAdmin := (role.(string) == "admin")
-	staffIDStr := staffID.(string)
 
 	existingReport, err := h.AnnualJobRepo.GetAnnualDividendReportByID(reportID)
 	if err != nil {
@@ -685,7 +669,7 @@ func (h *AnnualJobHandler) DeleteAnnualDividendReport(c *gin.Context) {
     }
 
 	// Validate access to the parent annual job
-	jobForReport, err := h.AnnualJobRepo.GetAnnualJobByID(existingReport.JobID, staffIDStr, isAdmin)
+	jobForReport, err := h.AnnualJobRepo.GetAnnualJobByID(jobID, userClaims.StaffID, userClaims.IsAdmin)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Annual job for this dividend report not found or access denied"})

@@ -5,8 +5,10 @@ DROP TABLE IF EXISTS monthly_jobs CASCADE;
 DROP TABLE IF EXISTS annual_tax_reports CASCADE;
 DROP TABLE IF EXISTS annual_dividend_reports CASCADE;
 DROP TABLE IF EXISTS annual_jobs CASCADE;
-DROP TABLE IF EXISTS sp2dk_jobs CASCADE; -- Tambahkan ini
-DROP TABLE IF EXISTS pemeriksaan_jobs CASCADE; -- Tambahkan ini
+DROP TABLE IF EXISTS sp2dk_jobs CASCADE;
+DROP TABLE IF EXISTS pemeriksaan_jobs CASCADE;
+DROP TABLE IF EXISTS invoices CASCADE; -- Tambahkan ini
+DROP TABLE IF EXISTS invoice_line_items CASCADE; -- Tambahkan ini
 DROP TABLE IF EXISTS clients CASCADE;
 DROP TABLE IF EXISTS staffs CASCADE;
 
@@ -23,7 +25,7 @@ CREATE TABLE IF NOT EXISTS clients (
     djp_online_username         VARCHAR(255),
     coretax_username            VARCHAR(255),
     coretax_password_hashed     VARCHAR(255),
-    pic_staff_sigma_id          UUID, -- ID PIC Staff Sigma (Foreign Key ke staffs.staff_id)
+    pic_staff_sigma_id          UUID,
     client_category             VARCHAR(100),
     pph_final_umkm              BOOLEAN DEFAULT FALSE,
     pph_25                      BOOLEAN DEFAULT FALSE,
@@ -34,7 +36,6 @@ CREATE TABLE IF NOT EXISTS clients (
     pelaporan_deviden           BOOLEAN DEFAULT FALSE,
     laporan_keuangan            BOOLEAN DEFAULT FALSE,
     investasi_deviden           BOOLEAN DEFAULT FALSE,
-
     created_at                  TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at                  TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -59,33 +60,24 @@ REFERENCES staffs (staff_id)
 ON DELETE SET NULL;
 
 
--- Tabel monthly_jobs
+-- Tabel monthly_jobs (Sudah Benar)
 CREATE TABLE IF NOT EXISTS monthly_jobs (
     job_id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     client_id                   UUID NOT NULL,
     job_month                   INT NOT NULL,
     job_year                    INT NOT NULL,
     assigned_pic_staff_sigma_id UUID,
-    overall_status              VARCHAR(50) DEFAULT 'Pending',
+    overall_status              VARCHAR(50) DEFAULT 'Dalam Pengerjaan', -- Standarisasi Default
     proof_of_work_url           TEXT,
     created_at                  TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at                  TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    
-    CONSTRAINT fk_client_job
-        FOREIGN KEY (client_id)
-        REFERENCES clients (client_id)
-        ON DELETE CASCADE,
-    
-    CONSTRAINT fk_assigned_pic_staff_sigma
-        FOREIGN KEY (assigned_pic_staff_sigma_id)
-        REFERENCES staffs (staff_id)
-        ON DELETE SET NULL,
-        
+    CONSTRAINT fk_client_job FOREIGN KEY (client_id) REFERENCES clients (client_id) ON DELETE CASCADE,
+    CONSTRAINT fk_assigned_pic_staff_sigma FOREIGN KEY (assigned_pic_staff_sigma_id) REFERENCES staffs (staff_id) ON DELETE SET NULL,
     CONSTRAINT unique_monthly_job_per_client UNIQUE (client_id, job_month, job_year)
 );
 
 
--- Tabel monthly_tax_reports
+-- Tabel monthly_tax_reports (Tidak ada perubahan)
 CREATE TABLE IF NOT EXISTS monthly_tax_reports (
     report_id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     job_id              UUID NOT NULL,
@@ -97,42 +89,26 @@ CREATE TABLE IF NOT EXISTS monthly_tax_reports (
     report_date         DATE,
     created_at          TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at          TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT fk_monthly_job
-        FOREIGN KEY (job_id)
-        REFERENCES monthly_jobs (job_id)
-        ON DELETE CASCADE,
-    
+    CONSTRAINT fk_monthly_job FOREIGN KEY (job_id) REFERENCES monthly_jobs (job_id) ON DELETE CASCADE,
     CONSTRAINT unique_tax_report_per_job UNIQUE (job_id, tax_type)
 );
 
 
--- Tabel annual_jobs
+-- Tabel annual_jobs (Sudah Benar)
 CREATE TABLE IF NOT EXISTS annual_jobs (
     job_id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     client_id                   UUID NOT NULL,
     job_year                    INT NOT NULL,
     assigned_pic_staff_sigma_id UUID,
-    overall_status              VARCHAR(50) DEFAULT 'Pending',
+    overall_status              VARCHAR(50) DEFAULT 'Dalam Pengerjaan', -- Standarisasi Default
     proof_of_work_url           TEXT,
     created_at                  TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at                  TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    
-    CONSTRAINT fk_client_annual_job
-        FOREIGN KEY (client_id)
-        REFERENCES clients (client_id)
-        ON DELETE CASCADE,
-    
-    CONSTRAINT fk_assigned_pic_staff_annual_sigma
-        FOREIGN KEY (assigned_pic_staff_sigma_id)
-        REFERENCES staffs (staff_id)
-        ON DELETE SET NULL,
-        
+    CONSTRAINT fk_client_annual_job FOREIGN KEY (client_id) REFERENCES clients (client_id) ON DELETE CASCADE,
+    CONSTRAINT fk_assigned_pic_staff_annual_sigma FOREIGN KEY (assigned_pic_staff_sigma_id) REFERENCES staffs (staff_id) ON DELETE SET NULL,
     CONSTRAINT unique_annual_job_per_client UNIQUE (client_id, job_year)
 );
 
-
--- Tabel annual_tax_reports
 CREATE TABLE IF NOT EXISTS annual_tax_reports (
     report_id       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     job_id          UUID NOT NULL,
@@ -172,7 +148,11 @@ CREATE TABLE IF NOT EXISTS annual_dividend_reports (
 );
 
 
--- Tabel sp2dk_jobs
+-- Tabel annual_tax_reports, annual_dividend_reports (Tidak ada perubahan)
+-- ... (kode Anda untuk tabel ini) ...
+
+
+-- Tabel sp2dk_jobs <-- PERBAIKAN DI SINI
 CREATE TABLE IF NOT EXISTS sp2dk_jobs (
     job_id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     client_id                   UUID NOT NULL,
@@ -185,24 +165,16 @@ CREATE TABLE IF NOT EXISTS sp2dk_jobs (
     bap2dk_date                 DATE,
     payment_date                DATE,
     report_date                 DATE,
-    job_status                  VARCHAR(50) DEFAULT 'Dikerjakan',
+    overall_status              VARCHAR(50) DEFAULT 'Dalam Pengerjaan', -- <-- DIUBAH
     proof_of_work_url           TEXT,
     created_at                  TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at                  TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    
-    CONSTRAINT fk_sp2dk_client
-        FOREIGN KEY (client_id)
-        REFERENCES clients (client_id)
-        ON DELETE CASCADE,
-    
-    CONSTRAINT fk_sp2dk_assigned_pic_staff
-        FOREIGN KEY (assigned_pic_staff_sigma_id)
-        REFERENCES staffs (staff_id)
-        ON DELETE SET NULL
+    CONSTRAINT fk_sp2dk_client FOREIGN KEY (client_id) REFERENCES clients (client_id) ON DELETE CASCADE,
+    CONSTRAINT fk_sp2dk_assigned_pic_staff FOREIGN KEY (assigned_pic_staff_sigma_id) REFERENCES staffs (staff_id) ON DELETE SET NULL
 );
 
 
--- Tabel pemeriksaan_jobs <-- Ini yang menyebabkan error Anda
+-- Tabel pemeriksaan_jobs <-- PERBAIKAN DI SINI
 CREATE TABLE IF NOT EXISTS pemeriksaan_jobs (
     job_id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     client_id                   UUID NOT NULL,
@@ -213,18 +185,13 @@ CREATE TABLE IF NOT EXISTS pemeriksaan_jobs (
     sp2_date                    DATE,
     skp_no                      VARCHAR(255),
     skp_date                    DATE,
-    job_status                  VARCHAR(50) DEFAULT 'Dikerjakan',
+    overall_status              VARCHAR(50) DEFAULT 'Dalam Pengerjaan', -- <-- DIUBAH
     proof_of_work_url           TEXT,
     created_at                  TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at                  TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    
-    CONSTRAINT fk_pemeriksaan_client
-        FOREIGN KEY (client_id)
-        REFERENCES clients (client_id)
-        ON DELETE CASCADE,
-    
-    CONSTRAINT fk_pemeriksaan_assigned_pic_staff
-        FOREIGN KEY (assigned_pic_staff_sigma_id)
-        REFERENCES staffs (staff_id)
-        ON DELETE SET NULL
+    CONSTRAINT fk_pemeriksaan_client FOREIGN KEY (client_id) REFERENCES clients (client_id) ON DELETE CASCADE,
+    CONSTRAINT fk_pemeriksaan_assigned_pic_staff FOREIGN KEY (assigned_pic_staff_sigma_id) REFERENCES staffs (staff_id) ON DELETE SET NULL
 );
+
+-- Tabel invoices dan invoice_line_items (Tidak ada perubahan)
+-- ... (kode Anda untuk tabel ini) ...

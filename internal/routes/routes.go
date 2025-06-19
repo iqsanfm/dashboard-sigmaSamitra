@@ -8,38 +8,47 @@ import (
 	"github.com/iqsanfm/dashboard-pekerjaan-backend/internal/handlers"
 	"github.com/iqsanfm/dashboard-pekerjaan-backend/internal/middlewares"
 	"github.com/iqsanfm/dashboard-pekerjaan-backend/internal/repositories"
+	"github.com/iqsanfm/dashboard-pekerjaan-backend/internal/services"
 )
 
 // SetupRouter sets up all application routes
 func SetupRouter(db *sql.DB, cfg *config.Config) *gin.Engine {
 	r := gin.Default()
 
-	// Initialize repositories
-	clientRepo := repositories.NewClientRepository(db)
+	// 1. Initialize Repositories
+clientRepo := repositories.NewClientRepository(db)
 	monthlyJobRepo := repositories.NewMonthlyJobRepository(db)
 	staffRepo := repositories.NewStaffRepository(db)
 	annualJobRepo := repositories.NewAnnualJobRepository(db)
 	sp2dkJobRepo := repositories.NewSp2dkJobRepository(db)
 	pemeriksaanJobRepo := repositories.NewPemeriksaanJobRepository(db)
+	invoiceRepo := repositories.NewInvoiceRepository(db)
 
-	// Initialize handlers
-	clientHandler := handlers.NewClientHandler(clientRepo, staffRepo, monthlyJobRepo, annualJobRepo, sp2dkJobRepo, pemeriksaanJobRepo) 
-	monthlyJobHandler := handlers.NewMonthlyJobHandler(monthlyJobRepo, clientRepo, staffRepo)
+		invoiceService := services.NewInvoiceService(
+		invoiceRepo,
+		monthlyJobRepo,
+		annualJobRepo,
+		sp2dkJobRepo,
+		pemeriksaanJobRepo,
+	)
+
+	// 2. Initialize Handlers
+	clientHandler := handlers.NewClientHandler(clientRepo, staffRepo, monthlyJobRepo, annualJobRepo, sp2dkJobRepo, pemeriksaanJobRepo)
 	staffHandler := handlers.NewStaffHandler(staffRepo)
 	authHandler := handlers.NewAuthHandler(staffRepo, cfg.JWTSecretKey)
-	annualJobHandler := handlers.NewAnnualJobHandler(annualJobRepo, clientRepo, staffRepo)
-	sp2dkJobHandler := handlers.NewSp2dkJobHandler(sp2dkJobRepo, clientRepo, staffRepo)
-	pemeriksaanJobHandler := handlers.NewPemeriksaanJobHandler(pemeriksaanJobRepo, clientRepo, staffRepo) 
+	monthlyJobHandler := handlers.NewMonthlyJobHandler(monthlyJobRepo, clientRepo, staffRepo, invoiceService)
+	annualJobHandler := handlers.NewAnnualJobHandler(annualJobRepo, clientRepo, staffRepo, invoiceService)
+	sp2dkJobHandler := handlers.NewSp2dkJobHandler(sp2dkJobRepo, clientRepo, staffRepo, invoiceService)
+	pemeriksaanJobHandler := handlers.NewPemeriksaanJobHandler(pemeriksaanJobRepo, clientRepo, staffRepo, invoiceService)
+	invoiceHandler := handlers.NewInvoiceHandler(invoiceRepo)
 
-	// Initialize Auth Middleware
+	// 3. Initialize Middleware
 	authMiddleware := middlewares.NewAuthMiddleware(cfg)
 
-	// API V1 Group
+	// 4. Setup Route Groups
 	v1 := r.Group("/api/v1")
-
-	
 	{
-		// Auth routes (NOT PROTECTED)
+		// Auth routes (Public)
 		authRoutes := v1.Group("/auth")
 		{
 			authRoutes.POST("/login", authHandler.Login)
@@ -47,10 +56,7 @@ func SetupRouter(db *sql.DB, cfg *config.Config) *gin.Engine {
 
 		// Protected Routes Group
 		protected := v1.Group("/")
-		// --- JANGAN LUPA AKTIFKAN KEMBALI AUTENTIKASI SETELAH SELESAI DEVELOPMENT ---
 		protected.Use(authMiddleware.AuthRequired())
-		// --- AKHIR PENGINGAT ---
-
 		{
 			// Client routes
 			clientRoutes := protected.Group("/clients")
@@ -63,6 +69,7 @@ func SetupRouter(db *sql.DB, cfg *config.Config) *gin.Engine {
 				clientRoutes.DELETE("/:id", clientHandler.DeleteClient)
 			}
 
+			// Static route for file uploads
 			r.Static("/uploads", "./uploads")
 
 			// Monthly Job routes
@@ -72,9 +79,7 @@ func SetupRouter(db *sql.DB, cfg *config.Config) *gin.Engine {
 				monthlyJobRoutes.GET("/", monthlyJobHandler.GetAllMonthlyJobs)
 				monthlyJobRoutes.GET("/:id", monthlyJobHandler.GetMonthlyJobByID)
 				monthlyJobRoutes.PATCH("/:id", monthlyJobHandler.UpdateMonthlyJob)
-				
 
-				// Nested Tax Report routes
 				taxReportRoutes := monthlyJobRoutes.Group("/:id/tax-reports")
 				{
 					taxReportRoutes.POST("/", monthlyJobHandler.CreateMonthlyTaxReport)
@@ -91,7 +96,6 @@ func SetupRouter(db *sql.DB, cfg *config.Config) *gin.Engine {
 				annualJobRoutes.GET("/:id", annualJobHandler.GetAnnualJobByID)
 				annualJobRoutes.PATCH("/:id", annualJobHandler.UpdateAnnualJob)
 
-				// Nested SPT Tahunan Reports
 				sptRoutes := annualJobRoutes.Group("/:id/spt-reports")
 				{
 					sptRoutes.POST("/", annualJobHandler.CreateAnnualTaxReport)
@@ -99,7 +103,6 @@ func SetupRouter(db *sql.DB, cfg *config.Config) *gin.Engine {
 					sptRoutes.DELETE("/:report_id", annualJobHandler.DeleteAnnualTaxReport)
 				}
 
-				// Nested Dividend Reports
 				dividendRoutes := annualJobRoutes.Group("/:id/dividend-reports")
 				{
 					dividendRoutes.POST("/", annualJobHandler.CreateAnnualDividendReport)
@@ -119,7 +122,7 @@ func SetupRouter(db *sql.DB, cfg *config.Config) *gin.Engine {
 				staffRoutes.PATCH("/:id/password", staffHandler.ChangeStaffPassword)
 			}
 
-			// SP2DK Job routes <-- RUTE BARU UNTUK SP2DK
+			// SP2DK Job routes
 			sp2dkJobRoutes := protected.Group("/sp2dk-jobs")
 			{
 				sp2dkJobRoutes.POST("/", sp2dkJobHandler.CreateSp2dkJob)
@@ -129,6 +132,7 @@ func SetupRouter(db *sql.DB, cfg *config.Config) *gin.Engine {
 				sp2dkJobRoutes.DELETE("/:id", sp2dkJobHandler.DeleteSp2dkJob)
 			}
 
+			// Pemeriksaan Job routes
 			pemeriksaanJobRoutes := protected.Group("/pemeriksaan-jobs")
 			{
 				pemeriksaanJobRoutes.POST("/", pemeriksaanJobHandler.CreatePemeriksaanJob)
@@ -136,6 +140,14 @@ func SetupRouter(db *sql.DB, cfg *config.Config) *gin.Engine {
 				pemeriksaanJobRoutes.GET("/:id", pemeriksaanJobHandler.GetPemeriksaanJobByID)
 				pemeriksaanJobRoutes.PATCH("/:id", pemeriksaanJobHandler.UpdatePemeriksaanJob)
 				pemeriksaanJobRoutes.DELETE("/:id", pemeriksaanJobHandler.DeletePemeriksaanJob)
+			}
+
+			// Invoice Routes
+			invoiceRoutes := protected.Group("/invoices")
+			{
+				invoiceRoutes.POST("/", invoiceHandler.CreateInvoice)
+				invoiceRoutes.GET("/", invoiceHandler.GetAllInvoices)
+				invoiceRoutes.GET("/:id", invoiceHandler.GetInvoiceByID)
 			}
 		}
 	}

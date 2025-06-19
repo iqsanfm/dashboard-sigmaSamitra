@@ -12,6 +12,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/iqsanfm/dashboard-pekerjaan-backend/internal/models"
 	"github.com/iqsanfm/dashboard-pekerjaan-backend/internal/repositories"
+	"github.com/iqsanfm/dashboard-pekerjaan-backend/internal/services"
+	"github.com/iqsanfm/dashboard-pekerjaan-backend/pkg/auth"
 )
 
 // MonthlyJobHandler handles HTTP requests for monthly job operations
@@ -19,13 +21,15 @@ type MonthlyJobHandler struct {
 	MonthlyJobRepo repositories.MonthlyJobRepository
 	ClientRepo     repositories.ClientRepository // Need client repo to validate client_id
 	StaffRepo      repositories.StaffRepository
+	InvoiceService services.InvoiceService
 }
 
 // NewMonthlyJobHandler creates a new MonthlyJobHandler
-func NewMonthlyJobHandler(mjRepo repositories.MonthlyJobRepository, cRepo repositories.ClientRepository, sRepo repositories.StaffRepository,) *MonthlyJobHandler {
+func NewMonthlyJobHandler(mjRepo repositories.MonthlyJobRepository, cRepo repositories.ClientRepository, sRepo repositories.StaffRepository, invService services.InvoiceService,) *MonthlyJobHandler {
 	return &MonthlyJobHandler{
 		MonthlyJobRepo: mjRepo,
 		ClientRepo:     cRepo,
+		InvoiceService: invService,
 	}
 }
 
@@ -37,21 +41,19 @@ func (h *MonthlyJobHandler) CreateMonthlyJob(c *gin.Context) {
 		return
 	}
 
-	 staffID, exists := c.Get("staffID")
-    if !exists {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "Staff ID not found in context"})
-        return
-    }
-    role, exists := c.Get("role")
-    if !exists {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "Role not found in context"})
-        return
-    }
-    isAdmin := (role.(string) == "admin")
-    staffIDStr := staffID.(string)
+	claims, exists := c.Get("user_claims")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User claims not found in context"})
+		return
+	}
+	userClaims, ok := claims.(*auth.Claims)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse user claims"})
+		return
+	}
 
 	// Basic validation: Check if client_id exists
-	client, err := h.ClientRepo.GetClientByID(req.ClientID, staffIDStr, isAdmin)
+	client, err := h.ClientRepo.GetClientByID(req.ClientID, userClaims.StaffID, userClaims.IsAdmin)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to validate client ID"})
 		return
@@ -93,21 +95,18 @@ func (h *MonthlyJobHandler) CreateMonthlyJob(c *gin.Context) {
 
 // GetAllMonthlyJobs fetches all monthly jobs with their associated client and tax reports
 func (h *MonthlyJobHandler) GetAllMonthlyJobs(c *gin.Context) {
-	staffID, exists := c.Get("staffID")
+claims, exists := c.Get("user_claims")
 	if !exists {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Staff ID not found in context"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User claims not found in context"})
 		return
 	}
-	role, exists := c.Get("role")
-	if !exists {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Role not found in context"})
+	userClaims, ok := claims.(*auth.Claims)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse user claims"})
 		return
 	}
 
-	isAdmin := (role.(string) == "admin")
-	staffIDStr := staffID.(string)
-
-	jobs, err := h.MonthlyJobRepo.GetAllMonthlyJobs(staffIDStr, isAdmin) // <-- TERUSKAN PARAMETER FILTER
+	jobs, err := h.MonthlyJobRepo.GetAllMonthlyJobs(userClaims.StaffID, userClaims.IsAdmin) // <-- TERUSKAN PARAMETER FILTER
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve monthly jobs: " + err.Error()})
 		return
@@ -119,21 +118,18 @@ func (h *MonthlyJobHandler) GetAllMonthlyJobs(c *gin.Context) {
 func (h *MonthlyJobHandler) GetMonthlyJobByID(c *gin.Context) {
 	id := c.Param("id")
 
-	staffID, exists := c.Get("staffID")
+claims, exists := c.Get("user_claims")
 	if !exists {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Staff ID not found in context"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User claims not found in context"})
 		return
 	}
-	role, exists := c.Get("role")
-	if !exists {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Role not found in context"})
+	userClaims, ok := claims.(*auth.Claims)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse user claims"})
 		return
 	}
 
-	isAdmin := (role.(string) == "admin")
-	staffIDStr := staffID.(string)
-
-	job, err := h.MonthlyJobRepo.GetMonthlyJobByID(id, staffIDStr, isAdmin) // <-- TERUSKAN PARAMETER FILTER
+	job, err := h.MonthlyJobRepo.GetMonthlyJobByID(id, userClaims.StaffID, userClaims.IsAdmin) // <-- TERUSKAN PARAMETER FILTER
 	if err != nil {
 		if err == sql.ErrNoRows { // Ini akan menangani not found (baik karena ID salah atau tidak punya akses)
 			c.JSON(http.StatusNotFound, gin.H{"error": "Monthly job not found or access denied"})
@@ -153,20 +149,18 @@ func (h *MonthlyJobHandler) GetMonthlyJobByID(c *gin.Context) {
 func (h *MonthlyJobHandler) UpdateMonthlyJob(c *gin.Context) {
 	id := c.Param("id")
 
-	staffID, exists := c.Get("staffID")
+	claims, exists := c.Get("user_claims")
 	if !exists {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Staff ID not found in context"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User claims not found in context"})
 		return
 	}
-	role, exists := c.Get("role")
-	if !exists {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Role not found in context"})
+	userClaims, ok := claims.(*auth.Claims)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse user claims"})
 		return
 	}
-	isAdmin := (role.(string) == "admin")
-	staffIDStr := staffID.(string)
 
-	existingJob, err := h.MonthlyJobRepo.GetMonthlyJobByID(id, staffIDStr, isAdmin)
+	existingJob, err := h.MonthlyJobRepo.GetMonthlyJobByID(id, userClaims.StaffID, userClaims.IsAdmin)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Monthly job not found"})
@@ -290,21 +284,19 @@ func (h *MonthlyJobHandler) CreateMonthlyTaxReport(c *gin.Context) {
 		return
 	}
 
-	 staffID, exists := c.Get("staffID")
-    if !exists {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "Staff ID not found in context"})
-        return
-    }
-    role, exists := c.Get("role")
-    if !exists {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "Role not found in context"})
-        return
-    }
-    isAdmin := (role.(string) == "admin")
-    staffIDStr := staffID.(string)
+	 	claims, exists := c.Get("user_claims")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User claims not found in context"})
+		return
+	}
+	userClaims, ok := claims.(*auth.Claims)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse user claims"})
+		return
+	}
 
 	// Optional: Validate if jobID exists before adding tax report
-	_, err := h.MonthlyJobRepo.GetMonthlyJobByID(jobID, staffIDStr, isAdmin)
+	_, err := h.MonthlyJobRepo.GetMonthlyJobByID(jobID, userClaims.StaffID, userClaims.IsAdmin)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Monthly job not found for tax report"})

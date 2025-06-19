@@ -20,7 +20,7 @@ type Sp2dkJob struct {
 	Bap2dkDate                *time.Time `json:"bap2dk_date"` // Use pointer for nullable DATE
 	PaymentDate               *time.Time `json:"payment_date"` // Use pointer for nullable DATE
 	ReportDate                *time.Time `json:"report_date"` // Use pointer for nullable DATE
-	JobStatus                 string     `json:"job_status"` // "Dikerjakan", "Selesai", "Dibatalkan"
+	OverallStatus    					string     `json:"overall_status"`
 	ProofOfWorkURL            *string    `json:"proof_of_work_url"`
 	CreatedAt                 time.Time  `json:"created_at"`
 	UpdatedAt                 time.Time  `json:"updated_at"`
@@ -38,7 +38,7 @@ type NewSp2dkJobRequest struct {
 	Bap2dkDate              *time.Time `json:"bap2dk_date"`
 	PaymentDate             *time.Time `json:"payment_date"`
 	ReportDate              *time.Time `json:"report_date"`
-	JobStatus               string     `json:"job_status"` // e.g., "Dikerjakan", "Selesai", "Dibatalkan"
+	OverallStatus    				 string     `json:"overall_status"` // e.g., "Dikerjakan", "Selesai", "Dibatalkan"
 }
 
 // UpdateSp2dkJobRequest represents the structure for updating an SP2DK job (partial update via PATCH)
@@ -52,6 +52,6 @@ type UpdateSp2dkJobRequest struct {
 	Bap2dkDate              *time.Time `json:"bap2dk_date"`
 	PaymentDate             *time.Time `json:"payment_date"`
 	ReportDate              *time.Time `json:"report_date"`
-	JobStatus               *string    `json:"job_status"`
+	OverallStatus     			string     `json:"overall_status"`
 	ProofOfWorkURL          *string    `json:"proof_of_work_url"`
 }

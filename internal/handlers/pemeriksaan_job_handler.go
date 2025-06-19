@@ -3,14 +3,16 @@ package handlers
 import (
 	"database/sql"
 	"fmt"
+	"log"
 	"net/http"
-	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/iqsanfm/dashboard-pekerjaan-backend/internal/models"       // Pastikan ini modul Anda
 	"github.com/iqsanfm/dashboard-pekerjaan-backend/internal/repositories" // Pastikan ini modul Anda
+	"github.com/iqsanfm/dashboard-pekerjaan-backend/internal/services"
+	"github.com/iqsanfm/dashboard-pekerjaan-backend/pkg/auth"
 )
 
 // PemeriksaanJobHandler handles HTTP requests for Pemeriksaan job operations
@@ -18,14 +20,16 @@ type PemeriksaanJobHandler struct {
 	PemeriksaanJobRepo repositories.PemeriksaanJobRepository
 	ClientRepo         repositories.ClientRepository
 	StaffRepo          repositories.StaffRepository
+	InvoiceService 		 services.InvoiceService
 }
 
 // NewPemeriksaanJobHandler creates a new PemeriksaanJobHandler
-func NewPemeriksaanJobHandler(pjRepo repositories.PemeriksaanJobRepository, cRepo repositories.ClientRepository, sRepo repositories.StaffRepository) *PemeriksaanJobHandler {
+func NewPemeriksaanJobHandler(pjRepo repositories.PemeriksaanJobRepository, cRepo repositories.ClientRepository, sRepo repositories.StaffRepository, invService services.InvoiceService) *PemeriksaanJobHandler {
 	return &PemeriksaanJobHandler{
 		PemeriksaanJobRepo: pjRepo,
 		ClientRepo:         cRepo,
 		StaffRepo:          sRepo,
+		InvoiceService: invService,
 	}
 }
 
@@ -70,7 +74,7 @@ func (h *PemeriksaanJobHandler) CreatePemeriksaanJob(c *gin.Context) {
 		Sp2Date:               req.Sp2Date,
 		SkpNo:                 req.SkpNo,
 		SkpDate:               req.SkpDate,
-		JobStatus:             req.JobStatus,
+		OverallStatus:         req.OverallStatus,
 	}
 
 	if err := h.PemeriksaanJobRepo.CreatePemeriksaanJob(pemeriksaanJob); err != nil {
@@ -83,21 +87,18 @@ func (h *PemeriksaanJobHandler) CreatePemeriksaanJob(c *gin.Context) {
 
 // GetAllPemeriksaanJobs fetches all Pemeriksaan jobs, filtered by PIC if not admin
 func (h *PemeriksaanJobHandler) GetAllPemeriksaanJobs(c *gin.Context) {
-	staffID, exists := c.Get("staffID")
+
+claims, exists := c.Get("user_claims")
 	if !exists {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Staff ID not found in context"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User claims not found in context"})
 		return
 	}
-	role, exists := c.Get("role")
-	if !exists {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Role not found in context"})
+	userClaims, ok := claims.(*auth.Claims)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse user claims"})
 		return
 	}
-
-	isAdmin := (role.(string) == "admin")
-	staffIDStr := staffID.(string)
-
-	jobs, err := h.PemeriksaanJobRepo.GetAllPemeriksaanJobs(staffIDStr, isAdmin)
+	jobs, err := h.PemeriksaanJobRepo.GetAllPemeriksaanJobs(userClaims.StaffID, userClaims.IsAdmin)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve Pemeriksaan jobs: " + err.Error()})
 		return
@@ -109,21 +110,18 @@ func (h *PemeriksaanJobHandler) GetAllPemeriksaanJobs(c *gin.Context) {
 func (h *PemeriksaanJobHandler) GetPemeriksaanJobByID(c *gin.Context) {
 	id := c.Param("id")
 
-	staffID, exists := c.Get("staffID")
+		claims, exists := c.Get("user_claims")
 	if !exists {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Staff ID not found in context"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User claims not found in context"})
 		return
 	}
-	role, exists := c.Get("role")
-	if !exists {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Role not found in context"})
+	userClaims, ok := claims.(*auth.Claims)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse user claims"})
 		return
 	}
 
-	isAdmin := (role.(string) == "admin")
-	staffIDStr := staffID.(string)
-
-	job, err := h.PemeriksaanJobRepo.GetPemeriksaanJobByID(id, staffIDStr, isAdmin)
+	job, err := h.PemeriksaanJobRepo.GetPemeriksaanJobByID(id, userClaims.StaffID, userClaims.IsAdmin)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Pemeriksaan job not found or access denied"})
@@ -140,23 +138,25 @@ func (h *PemeriksaanJobHandler) GetPemeriksaanJobByID(c *gin.Context) {
 }
 
 // UpdatePemeriksaanJob handles partial updates to a Pemeriksaan job's main fields
+// internal/handlers/pemeriksaan_job_handler.go
+
+// internal/handlers/pemeriksaan_job_handler.go
+
 func (h *PemeriksaanJobHandler) UpdatePemeriksaanJob(c *gin.Context) {
 	id := c.Param("id")
-
-	staffID, exists := c.Get("staffID")
+	claims, exists := c.Get("user_claims")
 	if !exists {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Staff ID not found in context"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User claims not found in context"})
 		return
 	}
-	role, exists := c.Get("role")
-	if !exists {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Role not found in context"})
+	userClaims, ok := claims.(*auth.Claims)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse user claims"})
 		return
 	}
-	isAdmin := (role.(string) == "admin")
-	staffIDStr := staffID.(string)
 
-	existingJob, err := h.PemeriksaanJobRepo.GetPemeriksaanJobByID(id, staffIDStr, isAdmin) // Filter by access
+	// 1. Ambil data pekerjaan yang ada dari database
+	existingJob, err := h.PemeriksaanJobRepo.GetPemeriksaanJobByID(id, userClaims.StaffID, userClaims.IsAdmin)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Pemeriksaan job not found"})
@@ -165,131 +165,85 @@ func (h *PemeriksaanJobHandler) UpdatePemeriksaanJob(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve job for update: " + err.Error()})
 		return
 	}
-	if existingJob == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Pemeriksaan job not found"})
-		return
-	}
 
-	// --- PENANGANAN MULTIPART FORM-DATA (FILE DAN FIELD LAINNYA) ---
-	// Mendapatkan nilai field dari form (bukan JSON)
-	jobStatusForm := c.PostForm("job_status")
+	// 2. Ambil semua data dari form yang dikirim
+	// ================== PERUBAHAN NAMA FIELD DIMULAI DARI SINI ==================
+	overallStatusForm := c.PostForm("overall_status") // <-- Gunakan nama field standar
 	assignedPicStaffSigmaIDForm := c.PostForm("assigned_pic_staff_sigma_id")
 	contractNoForm := c.PostForm("contract_no")
 	sp2NoForm := c.PostForm("sp2_no")
 	skpNoForm := c.PostForm("skp_no")
-	
-	// Tanggal dalam format string dari form, perlu di-parse ke time.Time
 	contractDateForm := c.PostForm("contract_date")
 	sp2DateForm := c.PostForm("sp2_date")
 	skpDateForm := c.PostForm("skp_date")
 
-
-	// Mendapatkan file yang diupload (bukti PDF)
-	file, err := c.FormFile("proof_of_work_pdf")
-	fileReceived := (err == nil && file != nil) // True jika file diterima
-
-	// Validasi: Jika status berubah menjadi "Selesai", file PDF harus ada
-	if jobStatusForm != "" && jobStatusForm == "Selesai" {
-		if !fileReceived {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Proof of work PDF is required when setting status to 'Selesai'"})
-			return
-		}
-		// Validasi tipe file (opsional tapi disarankan)
-		if file.Header.Get("Content-Type") != "application/pdf" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Uploaded file must be a PDF"})
-			return
-		}
-	} else if jobStatusForm != "" && jobStatusForm != "Selesai" && fileReceived {
-        // Jika status BUKAN Selesai, tapi ada file diupload, tolak atau ingatkan
-        c.JSON(http.StatusBadRequest, gin.H{"error": "Proof of work PDF can only be uploaded when status is 'Selesai'"})
-        return
-    }
-
-	// Memproses file upload jika ada
-	var uploadedFilePath *string
-	if fileReceived {
-		// Buat nama file unik (misalnya JobID.pdf)
-		filename := fmt.Sprintf("%s.pdf", existingJob.JobID)
-		filePath := filepath.Join("uploads", filename) // Simpan di folder 'uploads'
-
-		// Pastikan folder 'uploads' ada
-		if _, err := os.Stat("uploads"); os.IsNotExist(err) {
-			os.Mkdir("uploads", os.ModePerm)
-		}
-
-		// Simpan file
-		if err := c.SaveUploadedFile(file, filePath); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save proof of work PDF: " + err.Error()})
-			return
-		}
-		// URL yang akan disimpan di DB dan dikembalikan ke client
-		url := fmt.Sprintf("/uploads/%s", filename)
-		uploadedFilePath = &url
+	// 3. Terapkan semua perubahan dari form ke objek 'existingJob'
+	// Terapkan status baru ke field yang sudah distandarisasi
+	if overallStatusForm != "" {
+		existingJob.OverallStatus = overallStatusForm // <-- Gunakan field standar
 	}
 
-	// --- TERAPKAN UPDATE KE existingJob BERDASARKAN FORM FIELD ---
-	if jobStatusForm != "" {
-		existingJob.JobStatus = jobStatusForm
-	}
+	// Terapkan update untuk field lain...
 	if assignedPicStaffSigmaIDForm != "" {
-		// Validasi PIC Staff ID baru jika disediakan
 		staff, err := h.StaffRepo.GetStaffByID(assignedPicStaffSigmaIDForm)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to validate new Assigned PIC Staff ID: " + err.Error()})
-			return
-		}
-		if staff == nil {
+		if err != nil || staff == nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "New Assigned PIC Staff ID not found"})
 			return
 		}
 		existingJob.AssignedPicStaffSigmaID = assignedPicStaffSigmaIDForm
 	}
-	if contractNoForm != "" {
-		existingJob.ContractNo = contractNoForm
-	}
-	if sp2NoForm != "" {
-		existingJob.Sp2No = sp2NoForm
-	}
-	if skpNoForm != "" {
-		existingJob.SkpNo = skpNoForm
-	}
+	if contractNoForm != "" { existingJob.ContractNo = contractNoForm }
+	if sp2NoForm != "" { existingJob.Sp2No = sp2NoForm }
+	if skpNoForm != "" { existingJob.SkpNo = skpNoForm }
 
-	// Parsing Tanggal-tanggal dari form (format YYYY-MM-DD atau RFC3339 jika dari JS/frontend)
-    // Penting: Pastikan format ini konsisten dengan cara frontend mengirim tanggal
+	// Terapkan tanggal-tanggal baru
 	if contractDateForm != "" {
-		parsedDate, err := time.Parse("2006-01-02", contractDateForm) // Contoh: YYYY-MM-DD
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid contract_date format"})
-			return
-		}
-		existingJob.ContractDate = &parsedDate
+		parsedDate, err := time.Parse("2006-01-02", contractDateForm)
+		if err == nil { existingJob.ContractDate = &parsedDate }
 	}
 	if sp2DateForm != "" {
 		parsedDate, err := time.Parse("2006-01-02", sp2DateForm)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid sp2_date format"})
-			return
-		}
-		existingJob.Sp2Date = &parsedDate
+		if err == nil { existingJob.Sp2Date = &parsedDate }
 	}
 	if skpDateForm != "" {
 		parsedDate, err := time.Parse("2006-01-02", skpDateForm)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid skp_date format"})
+		if err == nil { existingJob.SkpDate = &parsedDate }
+	}
+	
+	// 4. Proses file upload (jika ada)
+	file, err := c.FormFile("proof_of_work_pdf")
+	if err == nil {
+		filename := fmt.Sprintf("%s.pdf", existingJob.JobID)
+		filePath := filepath.Join("uploads", filename)
+		if err := c.SaveUploadedFile(file, filePath); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save proof of work PDF: " + err.Error()})
 			return
 		}
-		existingJob.SkpDate = &parsedDate
+		url := fmt.Sprintf("/uploads/%s", filename)
+		existingJob.ProofOfWorkURL = &url
 	}
 
-	// Jika file diupload, update ProofOfWorkURL di job
-	if uploadedFilePath != nil {
-		existingJob.ProofOfWorkURL = uploadedFilePath
+	// 5. Panggil pemicu invoice JIKA status diubah menjadi "Selesai"
+	// Gunakan field dan variabel yang sudah distandarisasi
+	if overallStatusForm == "Selesai" && existingJob.OverallStatus != "Selesai" {
+		log.Printf("INFO: Status pekerjaan %s diubah menjadi Selesai. Memicu pembuatan invoice...", existingJob.JobID)
+		_, err := h.InvoiceService.CreateInvoiceFromJob(
+			existingJob.JobID, "Pemeriksaan", existingJob.ClientID, existingJob.AssignedPicStaffSigmaID,
+		)
+		if err != nil {
+			log.Printf("PERINGATAN: Gagal membuat invoice otomatis untuk pekerjaan %s: %v", existingJob.JobID, err)
+		} else {
+			log.Printf("INFO: Invoice berhasil dibuat untuk pekerjaan %s.", existingJob.JobID)
+		}
 	}
-
+	
+	// 6. Simpan SEMUA perubahan ke database
+	log.Printf("DEBUG: Menyimpan final -> JobID: %s, Status: '%s'", existingJob.JobID, existingJob.OverallStatus)
 	if err := h.PemeriksaanJobRepo.UpdatePemeriksaanJob(existingJob); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update Pemeriksaan job: " + err.Error()})
 		return
 	}
+	
 	c.JSON(http.StatusOK, existingJob)
 }
 
@@ -297,20 +251,18 @@ func (h *PemeriksaanJobHandler) UpdatePemeriksaanJob(c *gin.Context) {
 func (h *PemeriksaanJobHandler) DeletePemeriksaanJob(c *gin.Context) {
 	id := c.Param("id")
 
-	staffID, exists := c.Get("staffID")
+claims, exists := c.Get("user_claims")
 	if !exists {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Staff ID not found in context"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User claims not found in context"})
 		return
 	}
-	role, exists := c.Get("role")
-	if !exists {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Role not found in context"})
+	userClaims, ok := claims.(*auth.Claims)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse user claims"})
 		return
 	}
-	isAdmin := (role.(string) == "admin")
-	staffIDStr := staffID.(string)
 
-	existingJob, err := h.PemeriksaanJobRepo.GetPemeriksaanJobByID(id, staffIDStr, isAdmin) // Filter by access
+	existingJob, err := h.PemeriksaanJobRepo.GetPemeriksaanJobByID(id, userClaims.StaffID, userClaims.IsAdmin) // Filter by access
 	if err != nil {
 		if err == sql.ErrNoRows {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Pemeriksaan job not found"})

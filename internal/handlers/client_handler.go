@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/iqsanfm/dashboard-pekerjaan-backend/internal/models"
 	"github.com/iqsanfm/dashboard-pekerjaan-backend/internal/repositories"
+	"github.com/iqsanfm/dashboard-pekerjaan-backend/pkg/auth"
 	"github.com/iqsanfm/dashboard-pekerjaan-backend/pkg/utils" // For password hashing
 )
 
@@ -96,21 +97,17 @@ func (h *ClientHandler) CreateClient(c *gin.Context) {
 
 // GetAllClients fetches all clients
 func (h *ClientHandler) GetAllClients(c *gin.Context) {
-	staffID, exists := c.Get("staffID")
+	claims, exists := c.Get("user_claims")
 	if !exists {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Staff ID not found in context"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User claims not found in context"})
 		return
 	}
-	role, exists := c.Get("role")
-	if !exists {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Role not found in context"})
+	userClaims, ok := claims.(*auth.Claims)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse user claims"})
 		return
 	}
-
-	isAdmin := (role.(string) == "admin") // Cast role to string and check if admin
-	staffIDStr := staffID.(string) // Cast staffID to string
-
-	clients, err := h.ClientRepo.GetAllClients(staffIDStr, isAdmin)
+	clients, err := h.ClientRepo.GetAllClients(userClaims.StaffID, userClaims.IsAdmin)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve clients"})
 		return
@@ -118,24 +115,23 @@ func (h *ClientHandler) GetAllClients(c *gin.Context) {
 	c.JSON(http.StatusOK, clients)
 }
 
+// internal/handlers/client_handler.go
+
 func (h *ClientHandler) GetClientDashboardJobs(c *gin.Context) {
-	clientID := c.Param("id") // client_id dari URL
-
-	staffID, exists := c.Get("staffID")
+	clientID := c.Param("id")
+	claims, exists := c.Get("user_claims")
 	if !exists {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Staff ID not found in context"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User claims not found in context"})
 		return
 	}
-	role, exists := c.Get("role")
-	if !exists {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Role not found in context"})
+	userClaims, ok := claims.(*auth.Claims)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse user claims"})
 		return
 	}
-	isAdmin := (role.(string) == "admin")
-	staffIDStr := staffID.(string)
 
-	// 1. Validasi keberadaan klien dan akses user ke klien tersebut
-	client, err := h.ClientRepo.GetClientByID(clientID, staffIDStr, isAdmin)
+	// 1. Validasi keberadaan klien
+	client, err := h.ClientRepo.GetClientByID(clientID, userClaims.StaffID, userClaims.IsAdmin)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Client not found or access denied"})
@@ -144,40 +140,38 @@ func (h *ClientHandler) GetClientDashboardJobs(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve client for dashboard: " + err.Error()})
 		return
 	}
-	if client == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Client not found or access denied"})
-		return
-	}
 
 	// 2. Ambil semua jenis pekerjaan untuk klien ini
-	monthlyJobs, err := h.MonthlyJobRepo.GetMonthlyJobsByClientID(clientID, staffIDStr, isAdmin)
-	if err != nil {
+	// ================== AWAL PERBAIKAN LOGIKA ==================
+
+	monthlyJobs, err := h.MonthlyJobRepo.GetMonthlyJobsByClientID(clientID, userClaims.StaffID, userClaims.IsAdmin)
+	if err != nil && err != sql.ErrNoRows { // Hanya return jika error BUKAN karena tidak ditemukan
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve monthly jobs for client: " + err.Error()})
 		return
 	}
 
-	annualJobs, err := h.AnnualJobRepo.GetAnnualJobsByClientID(clientID, staffIDStr, isAdmin)
-	if err != nil {
+	annualJobs, err := h.AnnualJobRepo.GetAnnualJobsByClientID(clientID, userClaims.StaffID, userClaims.IsAdmin)
+	if err != nil && err != sql.ErrNoRows { // Terapkan pola yang sama
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve annual jobs for client: " + err.Error()})
 		return
 	}
 
-	sp2dkJobs, err := h.Sp2dkJobRepo.GetSp2dkJobsByClientID(clientID, staffIDStr, isAdmin)
-	if err != nil {
+	sp2dkJobs, err := h.Sp2dkJobRepo.GetSp2dkJobsByClientID(clientID, userClaims.StaffID, userClaims.IsAdmin)
+	if err != nil && err != sql.ErrNoRows { // Terapkan pola yang sama
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve SP2DK jobs for client: " + err.Error()})
 		return
 	}
 
-	// --- PERBAIKAN DI SINI: Gunakan GetPemeriksaanJobsByClientID ---
-	pemeriksaanJobs, err := h.PemeriksaanJobRepo.GetPemeriksaanJobsByClientID(clientID, staffIDStr, isAdmin)
-	if err != nil {
+	pemeriksaanJobs, err := h.PemeriksaanJobRepo.GetPemeriksaanJobsByClientID(clientID, userClaims.StaffID, userClaims.IsAdmin)
+	if err != nil && err != sql.ErrNoRows { // Terapkan pola yang sama
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve Pemeriksaan jobs for client: " + err.Error()})
 		return
 	}
-	// --- AKHIR PERBAIKAN ---
 
+	// ================== AKHIR PERBAIKAN LOGIKA ==================
 
 	// 3. Gabungkan hasilnya ke dalam satu respons JSON
+	// Jika sebuah pekerjaan tidak ada, variabelnya akan `nil` dan Gin akan mengubahnya menjadi array kosong `[]` di JSON.
 	response := gin.H{
 		"client_id":        client.ClientID,
 		"client_name":      client.ClientName,
@@ -195,21 +189,17 @@ func (h *ClientHandler) GetClientDashboardJobs(c *gin.Context) {
 func (h *ClientHandler) GetClientByID(c *gin.Context) {
 	id := c.Param("id")
 
-	staffID, exists := c.Get("staffID")
+claims, exists := c.Get("user_claims")
 	if !exists {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Staff ID not found in context"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User claims not found in context"})
 		return
 	}
-	role, exists := c.Get("role")
-	if !exists {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Role not found in context"})
+	userClaims, ok := claims.(*auth.Claims)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse user claims"})
 		return
 	}
-
-	isAdmin := (role.(string) == "admin")
-	staffIDStr := staffID.(string)
-
-	client, err := h.ClientRepo.GetClientByID(id, staffIDStr, isAdmin)
+	client, err := h.ClientRepo.GetClientByID(id, userClaims.StaffID, userClaims.IsAdmin)
 	if err != nil {
 		if err == sql.ErrNoRows { // Ini akan menangani not found (baik karena ID salah atau tidak punya akses)
 			c.JSON(http.StatusNotFound, gin.H{"error": "Client not found or access denied"})
@@ -234,21 +224,17 @@ func (h *ClientHandler) UpdateClient(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-
-	staffID, exists := c.Get("staffID")
-    if !exists {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "Staff ID not found in context"})
-        return
-    }
-    role, exists := c.Get("role")
-    if !exists {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "Role not found in context"})
-        return
-    }
-    isAdmin := (role.(string) == "admin")
-    staffIDStr := staffID.(string)
-
-	existingClient, err := h.ClientRepo.GetClientByID(id, staffIDStr, isAdmin)
+claims, exists := c.Get("user_claims")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User claims not found in context"})
+		return
+	}
+	userClaims, ok := claims.(*auth.Claims)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse user claims"})
+		return
+	}
+	existingClient, err := h.ClientRepo.GetClientByID(id, userClaims.StaffID, userClaims.IsAdmin)
 	if err != nil {
         if err == sql.ErrNoRows {
             c.JSON(http.StatusNotFound, gin.H{"error": "Client not found"})
@@ -332,21 +318,19 @@ func (h *ClientHandler) DeleteClient(c *gin.Context) {
 	id := c.Param("id")
 
 	 // Ambil staffID dan role dari context untuk filtering (untuk validasi keberadaan dan akses)
-    staffID, exists := c.Get("staffID")
-    if !exists {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "Staff ID not found in context"})
-        return
-    }
-    role, exists := c.Get("role")
-    if !exists {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "Role not found in context"})
-        return
-    }
-    isAdmin := (role.(string) == "admin")
-    staffIDStr := staffID.(string)
+ claims, exists := c.Get("user_claims")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User claims not found in context"})
+		return
+	}
+	userClaims, ok := claims.(*auth.Claims)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse user claims"})
+		return
+	}
 
 	// Check if client exists before deleting
-	client, err := h.ClientRepo.GetClientByID(id, staffIDStr, isAdmin)
+	client, err := h.ClientRepo.GetClientByID(id, userClaims.StaffID, userClaims.IsAdmin)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to check client existence"})
 		return

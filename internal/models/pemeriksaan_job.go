@@ -18,7 +18,7 @@ type PemeriksaanJob struct {
 	Sp2Date                   *time.Time `json:"sp2_date"` // Use pointer for nullable DATE
 	SkpNo                     string     `json:"skp_no"`
 	SkpDate                   *time.Time `json:"skp_date"` // Use pointer for nullable DATE
-	JobStatus                 string     `json:"job_status"` // "Dikerjakan", "Selesai", "Dibatalkan"
+	OverallStatus    					string     `json:"overall_status"` // "Dikerjakan", "Selesai", "Dibatalkan"
 	ProofOfWorkURL            *string    `json:"proof_of_work_url"`
 	CreatedAt                 time.Time  `json:"created_at"`
 	UpdatedAt                 time.Time  `json:"updated_at"`
@@ -34,7 +34,7 @@ type NewPemeriksaanJobRequest struct {
 	Sp2Date                 *time.Time `json:"sp2_date"`
 	SkpNo                   string     `json:"skp_no"`
 	SkpDate                 *time.Time `json:"skp_date"`
-	JobStatus               string     `json:"job_status"` // e.g., "Dikerjakan", "Selesai", "Dibatalkan"
+	OverallStatus    					string     `json:"overall_status"` // e.g., "Dikerjakan", "Selesai", "Dibatalkan"
 }
 
 // UpdatePemeriksaanJobRequest represents the structure for updating a Pemeriksaan job (partial update via PATCH)
@@ -46,6 +46,6 @@ type UpdatePemeriksaanJobRequest struct {
 	Sp2Date                 *time.Time `json:"sp2_date"`
 	SkpNo                   *string    `json:"skp_no"`
 	SkpDate                 *time.Time `json:"skp_date"`
-	JobStatus               *string    `json:"job_status"`
+	OverallStatus    				string     `json:"overall_status"`
 	ProofOfWorkURL          *string    `json:"proof_of_work_url"`
 }
